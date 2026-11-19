@@ -1,242 +1,159 @@
-# NyaAI – AI-Assisted Legal Case Analysis and Precedent Retrieval
+# Nyay AI
 
-NyaAI is a college project focused on building the foundation for an AI-assisted legal research system for Indian Supreme Court judgments. The current version is not a finished legal research assistant. It is a Retrieval-Augmented Generation (RAG) pipeline foundation that can ingest local PDF judgments, clean and chunk them, generate embeddings, store them in ChromaDB, and retrieve semantically relevant passages.
+Nyay AI is a local semantic search application for Indian Supreme Court judgments. It retrieves passages from an existing ChromaDB corpus and displays the source document, page, and technical retrieval score. It does not integrate or call an LLM and does not generate legal conclusions.
 
-The current version does not generate legal advice or verdict predictions. It only retrieves relevant passages from the supplied judgment corpus.
+**Nyay AI is not legal advice or legal analysis.** Verify every authority and consult a qualified lawyer.
 
-## 1. What NyaAI is
+## Features
 
-NyaAI is meant to eventually support the following workflow:
+- Semantic retrieval over `nyaai_judgments_v2`
+- Duplicate and near-duplicate passage removal
+- Source metadata for document, chunk, and page references
+- Configurable top-k retrieval
+- Retrieval-only API
+- No external LLM provider or API credentials
+- Professional responsive web interface
+- Grouped, bullet-point case results with available decision date, pages, sources, technical score, and selected verbatim passage highlights
+- Copy-case-bullets and copy-source-reference actions
+- On-demand, source-cited argument research outline with prompts to assess factual application and counterarguments; not a ready-to-file submission
+- Read-only retrieval evaluation
 
-1. A user provides a description of a legal issue or case.
-2. The system retrieves relevant Indian Supreme Court judgments.
-3. Judgments are re-ranked and contextualized.
-4. An LLM is given retrieved passages for a legal research brief.
-5. The system identifies applicable legal provisions and compares facts.
+## Architecture
 
-At this stage, the project focuses only on the retrieval foundation:
+```mermaid
+flowchart LR
+    UI[Web interface] --> API[FastAPI]
+    API --> Search[RAG search pipeline]
+    Search --> Embed[MiniLM query embedding]
+    Embed --> Chroma[ChromaDB v2 collection]
+    Chroma --> Search
+    Search --> Results[Passages and metadata]
+    Results --> API
+    API --> UI
+```
 
-PDF
-→ text extraction
-→ cleaning
-→ chunking
-→ embeddings
-→ ChromaDB
-→ semantic retrieval
-
-## 2. Current scope
-
-This project currently includes:
-
-- reading local PDF judgments with PyMuPDF
-- extracting text from each page
-- conservative cleaning of judgment text
-- word-aware chunking with overlap
-- embedding generation using sentence-transformers
-- persistent ChromaDB storage
-- semantic search over the embedded chunks
-- dataset inspection utilities
-
-The following are intentionally not part of this version:
-
-- React frontend
-- Node.js backend
-- MongoDB
-- LLM generation
-- LangChain
-- cross-encoder reranking
-- statutory mapping
-- evidence-gap analysis
-- authentication
-- deployment
-- automated legal conclusions
-
-## 3. RAG architecture
-
-The current architecture is intentionally simple and beginner-readable:
-
-- `rag/pdf_loader.py`: loads PDFs and extracts text while preserving page structure
-- `rag/cleaner.py`: removes obvious formatting noise without aggressively altering legal content
-- `rag/chunker.py`: splits the cleaned judgment into chunks of roughly 700 words with 100-word overlap
-- `rag/embeddings.py`: loads the embedding model and creates vector representations
-- `rag/vector_store.py`: stores chunks in ChromaDB with source metadata
-- `rag/search.py`: embeds a query and retrieves the top matching judgment chunks
-- `rag/ingest.py`: orchestrates the entire ingestion pipeline
-
-This intentionally avoids abstraction layers such as LangChain so that each component remains easy to study and explain in interviews or viva.
-
-## 4. Dataset source
-
-The target dataset is the Kaggle dataset:
-
-https://www.kaggle.com/datasets/adarshsingh0903/legal-dataset-sc-judgments-india-19502024
-
-Dataset name: "Legal Dataset: SC Judgments India 1950-2024"
-
-The system is designed to work with local PDFs that the user manually downloads and places in `data/raw/`. This project does not automatically download the dataset.
-
-## 5. Project structure
+## Repository layout
 
 ```text
-NyaAI/
-├── data/
-│   ├── raw/
-│   │   └── .gitkeep
-│   └── processed/
-│       └── .gitkeep
-├── rag/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── pdf_loader.py
-│   ├── cleaner.py
-│   ├── chunker.py
-│   ├── embeddings.py
-│   ├── vector_store.py
-│   ├── ingest.py
-│   └── search.py
-├── scripts/
-│   └── inspect_dataset.py
-├── requirements.txt
-├── .gitignore
-├── README.md
-├── .env.example
-└── tests/
+app/                 FastAPI backend and static frontend
+rag/                 PDF, chunking, embedding, ingestion, and retrieval modules
+scripts/             Dataset and retrieval utilities
+tests/               Automated tests
+data/chroma/         Existing persistent ChromaDB data
+data/raw/            Source PDFs (not committed)
+evaluation/          Retrieval evaluation reports
 ```
 
-## 6. Installation
+## Existing corpus
 
-Create a virtual environment:
+The production collection is `nyaai_judgments_v2`:
 
-```bash
-python -m venv venv
+- approximately 314,870 indexed chunks
+- embedding model: `sentence-transformers/all-MiniLM-L6-v2`
+- embedding dimensions: 384
+- chunks: approximately 700 words
+- overlap: 100 words
+- top-k: configurable, default 5
+
+The legacy `nyaai_judgments` collection remains available and untouched. Existing PDF, ChromaDB, and ingestion files must not be recreated or deleted for normal application use.
+
+## Installation
+
+Requires Python 3.12 on Windows.
+
+```powershell
+python -m venv .venv
+.\\.venv\\Scripts\\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-On Windows:
+No API key or external generation service is required. Search queries are processed by the local embedding model and the local ChromaDB collection. The embedding model may need to be downloaded the first time it is run.
 
-```bash
-venv\Scripts\activate
+Enter a short case summary or legal issue in the web interface. Retrieved passages are grouped by judgment and presented as concise case cards with filename-derived case names/dates where available, page references, technical similarity, and selected verbatim excerpts. An optional argument research outline assembles relevant retrieved passages with case/page references and prompts for factual application and counterarguments; it does not assess legal suitability or create a ready-to-file submission. This is not a generated case summary: the system does not infer the decision, legal holding, applicable law, or evidence gaps. Review the complete source passages before drawing conclusions.
+
+## Run locally
+
+```powershell
+.\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Install dependencies:
+Open `http://127.0.0.1:8000`.
 
-```bash
-pip install -r requirements.txt
+API documentation is available at `http://127.0.0.1:8000/docs`.
+
+## Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CHROMA_DIR` | `./data/chroma` | Persistent ChromaDB directory |
+| `COLLECTION_NAME` | `nyaai_judgments_v2` | Default collection |
+| `INGESTION_COLLECTION_NAME` | `nyaai_judgments_v2` | Production collection |
+| `EMBEDDING_MODEL` | MiniLM L6 v2 | Query and document embedding model |
+| `TOP_K` | `5` | Default retrieval count |
+| `CORS_ORIGINS` | local URLs | Allowed frontend origins |
+
+## API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | Collection and process health |
+| `GET` | `/api/status` | Retrieval configuration |
+| `POST` | `/api/retrieve` | Retrieval-only debugging |
+| `POST` | `/api/query` | Semantic judgment search with source passages |
+| `GET` | `/api/documents/{chunk_id}` | Retrieve one chunk and metadata |
+
+Example retrieval:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/query" -ContentType "application/json" -Body '{"query":"How does Article 21 protect personal liberty?","top_k":5}'
 ```
 
-## 7. How to add PDFs
+## Search CLI
 
-Place judgment PDFs manually in the `data/raw/` directory.
-
-The project is intended to work with a smaller development set first, such as 10–20 PDFs, before scaling to the full Kaggle corpus.
-
-## 8. How to inspect the dataset
-
-Run:
-
-```bash
-python scripts/inspect_dataset.py
-```
-
-This script will:
-
-- find all PDFs recursively in `data/raw/`
-- list each file and file size
-- attempt to open each PDF with PyMuPDF
-- report page count and extractability
-- show a summary of readable vs unreadable PDFs
-
-## 9. How to ingest documents
-
-Before ingestion, ensure your PDFs are inside `data/raw/`.
-
-Then run:
-
-```bash
-python -m rag.ingest
-```
-
-This will:
-
-1. discover all PDFs
-2. extract text
-3. clean text
-4. chunk text
-5. generate embeddings
-6. insert chunks into ChromaDB
-
-## 10. How semantic search works
-
-Run:
-
-```bash
+```powershell
 python -m rag.search
+python -m rag.search --collection nyaai_judgments
 ```
 
-Then type a natural-language legal query, for example:
+## Retrieval evaluation
 
-```text
-A person allegedly obtained money through a false promise.
+The evaluation command is read-only and does not modify ChromaDB or re-ingest documents:
+
+```powershell
+python -m scripts.evaluate_retrieval --top-k 5 --output evaluation/retrieval_evaluation.json
 ```
 
-The program will:
+The suite covers basic structure, Articles 13/368/19/21, circumstantial evidence, presumption of innocence, dying declarations, burden of proof, contractual coercion, frustration, and natural justice topics as available.
 
-- embed the query
-- send it to ChromaDB
-- retrieve the top matching chunks
-- print each result with its document name, chunk ID, similarity score, relevant text, and source metadata
+The report contains latency, candidate counts, duplicate removal counts, document diversity, metadata completeness, and lexical overlap diagnostics. Lexical overlap and retrieval similarity are not legal relevance labels or correctness measurements. Precision, Recall, and MRR require a manually labeled relevance dataset and are not fabricated here.
 
-## 11. Example query
+## Ingestion
 
-```text
-A person allegedly obtained money through a false promise.
+Normal application use does not ingest data. Existing ingestion remains resumable and safe:
+
+```powershell
+python -m rag.ingest --dry-run --resume --limit 1000
+python -m rag.ingest --limit 500 --resume
 ```
 
-This returns the most semantically similar judgment passages from the local PDF corpus.
+Do not run ingestion against the production collection merely to test application changes.
 
-## 12. Current limitations
+## Testing
 
-This version is intentionally limited.
+```powershell
+.\\.venv\\Scripts\\python.exe -m pytest -q
+```
 
-- no LLM-based answer generation
-- no legal reasoning engine
-- no statutory mapping
-- no cross-encoder reranking
-- no authentication or UI
-- no automatic legal advice or verdict prediction
-- no OCR support yet
-- limited metadata extraction beyond file name and chunk IDs
+Tests use mocks and temporary Chroma collections. They do not write to the production collection.
 
-## 13. Future roadmap
+## Security and limitations
 
-Planned future phases include:
-
-- OCR for scanned judgments
-- legal metadata extraction (case names, dates, parties, citations)
-- improved chunking and re-ranking
-- LLM-generated legal research briefs
-- statutory provision mapping
-- evidence-gap analysis
-- user auth and dashboard
-- frontend integration
-- deployment and scaling
-
-## 14. Current pipeline
-
-The current version does the following:
-
-PDF
-→ text extraction
-→ cleaning
-→ chunking
-→ embeddings
-→ ChromaDB
-→ semantic retrieval
-
-This is a stripped-down retrieval foundation for legal judgment search and is intentionally not a production-ready legal assistant.
-
-## 15. Notes
-
-- The application expects local PDF files supplied by the user.
-- No secrets are committed.
-- The project uses environment variables via `.env` and `.env.example`.
-- If no PDFs are placed in `data/raw/`, the system will report that no PDFs are available for ingestion or search.
+- The application does not use external LLM APIs or API credentials.
+- `.env` and local databases are excluded from Git.
+- The corpus does not represent every Indian judgment or statute.
+- Metadata extraction is filename/page based until richer judgment metadata is available.
+- The system does not generate legal analysis or legal conclusions.
+- It does not automatically identify evidence gaps, applicable statutes, or all relevant authorities.
+- Retrieval similarity is not legal relevance or confidence.
+- OCR is not attempted for image-only PDFs.

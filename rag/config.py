@@ -31,12 +31,22 @@ def _resolve_path(env_name: str, default: Path) -> Path:
 
 DATA_DIR = _resolve_path("DATA_DIR", BASE_DIR / "data" / "raw")
 CHROMA_DIR = _resolve_path("CHROMA_DIR", BASE_DIR / "data" / "chroma")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME", "nyaai_judgments")
+COLLECTION_NAME = os.getenv("COLLECTION_NAME", "nyaai_judgments_v2")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "700"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 TOP_K = int(os.getenv("TOP_K", "5"))
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+# Upgraded ingestion configuration
+INGESTION_COLLECTION_NAME = os.getenv(
+    "INGESTION_COLLECTION_NAME",
+    "nyaai_judgments_v2",
+)
 
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "16"))
+CHROMA_BATCH_SIZE = int(os.getenv("CHROMA_BATCH_SIZE", "500"))
+
+TRACKING_DB = BASE_DIR / "data" / "ingestion_state.sqlite3"
+FAILED_LOG = BASE_DIR / "data" / "ingestion_failures.csv"
 __all__ = [
     "BASE_DIR",
     "DATA_DIR",
@@ -46,4 +56,9 @@ __all__ = [
     "CHUNK_OVERLAP",
     "TOP_K",
     "EMBEDDING_MODEL",
+    "INGESTION_COLLECTION_NAME",
+    "EMBEDDING_BATCH_SIZE",
+    "CHROMA_BATCH_SIZE",
+    "TRACKING_DB",
+    "FAILED_LOG",
 ]

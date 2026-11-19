@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import fitz
+import pymupdf as fitz
 
 logger = logging.getLogger(__name__)
 

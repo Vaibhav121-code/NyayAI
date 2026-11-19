@@ -1,0 +1,110 @@
+{
+  "collection": "nyaai_judgments_v2",
+  "top_k": 5,
+  "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "measurement": "diagnostic only; no ground-truth relevance labels",
+  "queries": [
+    {
+      "category": "Constitutional law",
+      "query": "How does the basic structure doctrine limit Parliament's power to amend the Constitution under Article 368?",
+      "latency_seconds": 107.63,
+      "candidates_retrieved": 25,
+      "duplicates_removed": 0,
+      "unique_results": 5,
+      "unique_documents": 3,
+      "metadata_complete_results": 5
+    },
+    {
+      "category": "Constitutional law",
+      "query": "How do Articles 13 and 368 interact when a constitutional amendment affects fundamental rights?",
+      "latency_seconds": 88.9397,
+      "candidates_retrieved": 25,
+      "duplicates_removed": 0,
+      "unique_results": 5,
+      "unique_documents": 2,
+      "metadata_complete_results": 5
+    },
+    {
+      "category": "Criminal law",
+      "query": "What is the presumption of innocence and what standard of proof applies in a criminal trial?",
+      "latency_seconds": 79.5807,
+      "candidates_retrieved": 25,
+      "duplicates_removed": 1,
+      "unique_results": 5,
+      "unique_documents": 5,
+      "metadata_complete_results": 5
+    },
+    {
+      "category": "Criminal law",
+      "query": "When may a criminal conviction be based on circumstantial evidence?",
+      "latency_seconds": 67.7208,
+      "candidates_retrieved": 25,
+      "duplicates_removed": 0,
+      "unique_results": 5,
+      "unique_documents": 5,
+      "metadata_complete_results": 5
+    },
+    {
+      "category": "Contract law",
+      "query": "When can coercion, misrepresentation, or undue influence make an agreement voidable under the Indian Contract Act?",
+      "latency_seconds": 84.7677,
+      "candidates_retrieved": 25,
+      "duplicates_removed": 0,
+      "unique_results": 5,
+      "unique_documents": 5,
+      "metadata_complete_results": 5
+    },
+    {
+      "category": "Contract law",
+      "query": "When does supervening impossibility frustrate a contract under section 56 of the Indian Contract Act?",
+      "latency_seconds": 82.8407,
+      "candidates_retrieved": 25,
+      "duplicates_removed": 0,
+      "unique_results": 5,
+      "unique_documents": 5,
+      "metadata_complete_results": 5
+    },
+    {
+      "category": "Evidence law",
+      "query": "How should a court assess the reliability and corroboration of a dying declaration?",
+      "latency_seconds": 69.0918,
+      "candidates_retrieved": 25,
+      "duplicates_removed": 0,
+      "unique_results": 5,
+      "unique_documents": 5,
+      "metadata_complete_results": 5
+    },
+    {
+      "category": "Evidence law",
+      "query": "How is the burden of proof allocated under the Indian Evidence Act?",
+      "latency_seconds": 76.4164,
+      "candidates_retrieved": 25,
+      "duplicates_removed": 0,
+      "unique_results": 5,
+      "unique_documents": 5,
+      "metadata_complete_results": 5
+    },
+    {
+      "category": "Fundamental rights",
+      "query": "What restrictions on freedom of speech are permitted by Article 19(2)?",
+      "latency_seconds": 79.9511,
+      "candidates_retrieved": 25,
+      "duplicates_removed": 0,
+      "unique_results": 5,
+      "unique_documents": 5,
+      "metadata_complete_results": 5
+    },
+    {
+      "category": "Fundamental rights",
+      "query": "How does the Supreme Court assess deprivation of personal liberty under Article 21?",
+      "latency_seconds": 92.654,
+      "candidates_retrieved": 25,
+      "duplicates_removed": 2,
+      "unique_results": 5,
+      "unique_documents": 5,
+      "metadata_complete_results": 5
+    }
+  ],
+  "average_latency_seconds": 82.9593,
+  "total_latency_seconds": 829.5929
+}

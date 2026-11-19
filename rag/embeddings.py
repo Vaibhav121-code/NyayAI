@@ -1,11 +1,10 @@
 import logging
-import os
 from typing import Any
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from rag.config import EMBEDDING_MODEL
+from rag.config import EMBEDDING_BATCH_SIZE, EMBEDDING_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +18,10 @@ def load_embedding_model() -> SentenceTransformer:
     if _MODEL is not None:
         return _MODEL
 
-    device = "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") not in (None, "") and os.environ.get("CUDA_VISIBLE_DEVICES") != "-1" else "cpu"
     try:
         import torch
 
-        if torch.cuda.is_available():
-            device = "cuda"
+        device = "cuda" if torch.cuda.is_available() else "cpu"
     except Exception:
         device = "cpu"
 
@@ -35,11 +32,19 @@ def load_embedding_model() -> SentenceTransformer:
 
 def embed_texts(texts: list[str]) -> np.ndarray:
     """Embed multiple texts in batches."""
+    if EMBEDDING_BATCH_SIZE <= 0:
+        raise ValueError("EMBEDDING_BATCH_SIZE must be positive")
+
     if not texts:
         return np.empty((0, 0), dtype=np.float32)
 
     model = load_embedding_model()
-    embeddings = model.encode(texts, convert_to_numpy=True, normalize_embeddings=True, batch_size=32)
+    embeddings = model.encode(
+        texts,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+        batch_size=EMBEDDING_BATCH_SIZE,
+    )
     return np.asarray(embeddings, dtype=np.float32)
 
 

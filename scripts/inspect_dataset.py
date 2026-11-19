@@ -4,7 +4,7 @@ import logging
 import sys
 from pathlib import Path
 
-import fitz
+import pymupdf as fitz
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:

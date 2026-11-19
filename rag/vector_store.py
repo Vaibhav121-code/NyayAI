@@ -1,4 +1,4 @@
-import hashlib
+
 import logging
 from pathlib import Path
 from typing import Any
@@ -11,58 +11,73 @@ from rag.config import CHROMA_DIR, COLLECTION_NAME
 logger = logging.getLogger(__name__)
 
 
-def initialize_collection(collection_name: str = COLLECTION_NAME, chroma_dir: str | Path = CHROMA_DIR) -> Any:
-    """Initialize a persistent ChromaDB collection without recreating it on every run."""
+def initialize_collection(
+    collection_name: str = COLLECTION_NAME,
+    chroma_dir: str | Path = CHROMA_DIR,
+) -> Any:
+    """Initialize a persistent ChromaDB collection."""
     client = chromadb.PersistentClient(path=str(chroma_dir))
-    collection = client.get_or_create_collection(name=collection_name)
-    return collection
+    return client.get_or_create_collection(name=collection_name)
 
 
-def _stable_id(document_id: str, chunk_index: int) -> str:
-    return hashlib.sha256(f"{document_id}:{chunk_index}".encode("utf-8")).hexdigest()
-
-
-def add_documents(collection: Any, documents: list[str], embeddings: np.ndarray, metadata_list: list[dict[str, Any]]) -> None:
-    """Add document chunks and metadata to the collection with unique IDs."""
-    ids: list[str] = []
-    for idx, metadata in enumerate(metadata_list):
-        document_id = metadata.get("document_id", "unknown")
-        ids.append(_stable_id(document_id, idx))
-
-    existing = collection.get(ids=ids, include=[])
-    existing_ids = set(existing.get("ids", []))
-
-    filtered_ids: list[str] = []
-    filtered_docs: list[str] = []
-    filtered_embeddings: list[list[float]] = []
-    filtered_metadata: list[dict[str, Any]] = []
-
-    for idx, doc_id in enumerate(ids):
-        if doc_id in existing_ids:
-            continue
-        filtered_ids.append(doc_id)
-        filtered_docs.append(documents[idx])
-        filtered_embeddings.append(embeddings[idx].tolist())
-        filtered_metadata.append(metadata_list[idx])
-
-    if filtered_docs:
-        collection.add(
-            ids=filtered_ids,
-            documents=filtered_docs,
-            embeddings=filtered_embeddings,
-            metadatas=filtered_metadata,
+def add_documents(
+    collection: Any,
+    documents: list[str],
+    embeddings: np.ndarray,
+    metadata_list: list[dict[str, Any]],
+) -> None:
+    """Insert or update chunks using their deterministic chunk IDs."""
+    if len(documents) != len(metadata_list) or len(documents) != len(embeddings):
+        raise ValueError(
+            "documents, embeddings, and metadata_list must have equal lengths"
         )
 
+    if not documents:
+        return
 
-def search(collection: Any, query_embedding: np.ndarray, top_k: int = 5) -> dict[str, Any]:
-    """Query the collection with an embedding vector and return top-k matches."""
-    return collection.query(
-        query_embeddings=[query_embedding.tolist()],
-        n_results=top_k,
-        include=["documents", "distances", "metadatas"],
+    ids: list[str] = []
+
+    for metadata in metadata_list:
+        chunk_id = metadata.get("chunk_id")
+
+        if not isinstance(chunk_id, str) or not chunk_id.strip():
+            raise ValueError("Every chunk must have a non-empty chunk_id")
+
+        ids.append(chunk_id)
+
+    if len(ids) != len(set(ids)):
+        raise ValueError("Duplicate chunk_id values found in this batch")
+
+    collection.upsert(
+        ids=ids,
+        documents=documents,
+        embeddings=embeddings.tolist(),
+        metadatas=metadata_list,
     )
+
+    logger.info("Upserted %d chunks into ChromaDB", len(documents))
+
+
+def search(
+    collection: Any,
+    query_embedding: np.ndarray,
+    top_k: int = 5,
+    where: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Query the collection with an embedding vector."""
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+
+    query_options = {
+        "query_embeddings": [query_embedding.tolist()],
+        "n_results": top_k,
+        "include": ["documents", "distances", "metadatas"],
+    }
+    if where is not None:
+        query_options["where"] = where
+    return collection.query(**query_options)
 
 
 def count_documents(collection: Any) -> int:
-    """Return the total number of stored documents."""
+    """Return the total number of stored chunks."""
     return collection.count()
