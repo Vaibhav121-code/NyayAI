@@ -65,15 +65,29 @@ def run_search(
         raise ValueError("document_ids must contain non-empty document IDs")
 
     collection = initialize_collection(collection_name=collection_name)
+    collection_count = collection.count()
+    if collection_count == 0:
+        return {
+            "results": [],
+            "candidates_retrieved": 0,
+            "duplicates_removed": 0,
+            "corpus_available": False,
+        }
+
     query_embedding = embed_query(query)
     where = (
         {"document_id": {"$in": list(dict.fromkeys(document_ids))}}
         if document_ids is not None
         else None
     )
-    candidate_count = min(collection.count(), max(top_k * 5, top_k))
+    candidate_count = min(collection_count, max(top_k * 5, top_k))
     if candidate_count == 0:
-        return {"results": [], "candidates_retrieved": 0, "duplicates_removed": 0}
+        return {
+            "results": [],
+            "candidates_retrieved": 0,
+            "duplicates_removed": 0,
+            "corpus_available": True,
+        }
 
     if where is None:
         results = vector_search(collection, query_embedding, top_k=candidate_count)
@@ -82,7 +96,12 @@ def run_search(
 
     output: list[dict[str, object]] = []
     if not results or not results.get("documents"):
-        return {"results": output, "candidates_retrieved": 0, "duplicates_removed": 0}
+        return {
+            "results": output,
+            "candidates_retrieved": 0,
+            "duplicates_removed": 0,
+            "corpus_available": True,
+        }
 
     docs = results["documents"][0]
     metadatas = results["metadatas"][0]
@@ -111,6 +130,7 @@ def run_search(
         "results": unique_results,
         "candidates_retrieved": len(output),
         "duplicates_removed": duplicates_removed,
+        "corpus_available": True,
     }
 
 

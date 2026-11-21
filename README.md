@@ -1,6 +1,6 @@
 # Nyay AI
 
-Nyay AI is a local semantic search application for Indian Supreme Court judgments. It retrieves passages from an existing ChromaDB corpus and displays the source document, page, and technical retrieval score. It does not integrate or call an LLM and does not generate legal conclusions.
+Nyay AI is a local semantic search and legal-research application for Indian Supreme Court judgments. It retrieves passages from an existing ChromaDB corpus and compares those passages with a user-supplied case summary. It does not use a generative language model.
 
 **Nyay AI is not legal advice or legal analysis.** Verify every authority and consult a qualified lawyer.
 
@@ -10,12 +10,14 @@ Nyay AI is a local semantic search application for Indian Supreme Court judgment
 - Duplicate and near-duplicate passage removal
 - Source metadata for document, chunk, and page references
 - Configurable top-k retrieval
-- Retrieval-only API
-- No external LLM provider or API credentials
+- Semantic retrieval API and deterministic case-to-precedent comparison
+- No generative model, external AI provider, or AI API credentials
 - Professional responsive web interface
 - Grouped, bullet-point case results with available decision date, pages, sources, technical score, and selected verbatim passage highlights
+- Chatbot follow-ups can target one explicitly selected or named case (Case A–E), retain recent question context, and show question-ranked excerpts with page and chunk citations
+- Comparison and evidence-review prompts use retrieval and exact keyword overlap; they do not generate arguments or confirm evidence gaps
 - Copy-case-bullets and copy-source-reference actions
-- On-demand, source-cited argument research outline with prompts to assess factual application and counterarguments; not a ready-to-file submission
+- On-demand comparison of case facts with retrieved judgment passages; lawyer review is required
 - Read-only retrieval evaluation
 
 ## Architecture
@@ -68,9 +70,9 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-No API key or external generation service is required. Search queries are processed by the local embedding model and the local ChromaDB collection. The embedding model may need to be downloaded the first time it is run.
+Search requires no API key or generative model. The local embedding model and ChromaDB collection may need to be downloaded or initialized the first time they are run.
 
-Enter a short case summary or legal issue in the web interface. Retrieved passages are grouped by judgment and presented as concise case cards with filename-derived case names/dates where available, page references, technical similarity, and selected verbatim excerpts. An optional argument research outline assembles relevant retrieved passages with case/page references and prompts for factual application and counterarguments; it does not assess legal suitability or create a ready-to-file submission. This is not a generated case summary: the system does not infer the decision, legal holding, applicable law, or evidence gaps. Review the complete source passages before drawing conclusions.
+Enter a short case summary or legal issue in the web interface. Retrieved passages are grouped by judgment and presented as case cards with page references and excerpts. Case analysis compares exact keywords in the supplied summary with passages retrieved from the selected judgments and surfaces general questions for counsel. It does not generate arguments, determine legal applicability, or identify confirmed evidence gaps. Keyword overlap is not proof of factual or legal similarity; review complete judgments and consult qualified counsel.
 
 ## Run locally
 
@@ -81,6 +83,12 @@ Enter a short case summary or legal issue in the web interface. Retrieved passag
 Open `http://127.0.0.1:8000`.
 
 API documentation is available at `http://127.0.0.1:8000/docs`.
+
+## Deploy a free demo on Render
+
+The repository includes a Render Blueprint in `render.yaml`. Push the project to GitHub, create a new Blueprint from the repository in Render, and deploy the `nyayai-demo` web service. The service uses the lightweight `requirements-render.txt` dependencies and reports when the judgment corpus is missing.
+
+The local ChromaDB corpus is not stored in Git and is approximately 6.9 GB. Render's free web services use ephemeral storage and cannot attach persistent disks, so this free demo serves the UI but cannot return case-search results. A full search deployment needs a paid persistent disk or an external vector database and a separate data transfer/migration.
 
 ## Environment variables
 
@@ -101,6 +109,7 @@ API documentation is available at `http://127.0.0.1:8000/docs`.
 | `GET` | `/api/status` | Retrieval configuration |
 | `POST` | `/api/retrieve` | Retrieval-only debugging |
 | `POST` | `/api/query` | Semantic judgment search with source passages |
+| `POST` | `/api/analyze-case` | Retrieval-only comparison of a case summary with selected judgment passages |
 | `GET` | `/api/documents/{chunk_id}` | Retrieve one chunk and metadata |
 
 Example retrieval:

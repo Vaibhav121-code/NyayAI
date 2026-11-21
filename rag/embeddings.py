@@ -1,22 +1,26 @@
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from rag.config import EMBEDDING_BATCH_SIZE, EMBEDDING_MODEL
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = EMBEDDING_MODEL or "sentence-transformers/all-MiniLM-L6-v2"
-_MODEL: SentenceTransformer | None = None
+_MODEL: "SentenceTransformer | None" = None
 
 
-def load_embedding_model() -> SentenceTransformer:
+def load_embedding_model() -> "SentenceTransformer":
     """Load the configured embedding model on CUDA when available, else CPU."""
     global _MODEL
     if _MODEL is not None:
         return _MODEL
+
+    from sentence_transformers import SentenceTransformer
 
     try:
         import torch

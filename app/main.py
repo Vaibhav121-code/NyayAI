@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.retrieval_analysis import build_retrieval_analysis
 from rag.config import CHROMA_DIR, EMBEDDING_MODEL, INGESTION_COLLECTION_NAME
 from rag.search import run_search
 from rag.vector_store import initialize_collection
@@ -88,6 +89,12 @@ class RetrievalRequest(BaseModel):
     collection: str | None = Field(default=None, max_length=200)
 
 
+class CaseAnalysisRequest(BaseModel):
+    case_summary: str = Field(..., min_length=1, max_length=4000)
+    question: str = Field(..., min_length=1, max_length=1000)
+    document_ids: list[str] = Field(..., min_length=1, max_length=20)
+
+
 @app.exception_handler(ValueError)
 async def value_error_handler(_request: Request, exc: ValueError):
     raise HTTPException(status_code=400, detail=str(exc))
@@ -110,11 +117,14 @@ def health() -> dict[str, Any]:
 
 @app.get("/api/status")
 def status() -> dict[str, Any]:
+    chunk_count = initialize_collection(INGESTION_COLLECTION_NAME).count()
     return {
         "default_collection": INGESTION_COLLECTION_NAME,
         "embedding_model": EMBEDDING_MODEL,
         "chroma_dir": str(CHROMA_DIR),
         "mode": "retrieval_only",
+        "chunk_count": chunk_count,
+        "corpus_available": chunk_count > 0,
     }
 
 
@@ -149,6 +159,10 @@ def query(request: QueryRequest) -> dict[str, Any]:
             "query": request.query.strip(),
             "collection": collection_name,
             "mode": "retrieval_only",
+            "corpus_available": response.get(
+                "corpus_available",
+                bool(response["results"]),
+            ),
             "notice": (
                 "These are semantically retrieved passages, not a generated answer "
                 "or a legal conclusion."
@@ -194,6 +208,69 @@ def query(request: QueryRequest) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Judgment search failed")
         raise HTTPException(status_code=503, detail="Judgment search is temporarily unavailable") from exc
+
+
+@app.post("/api/analyze-case")
+def analyze_case(request: CaseAnalysisRequest) -> dict[str, Any]:
+    retrieval_query = (
+        f"{request.question.strip()}\n\n"
+        f"Case facts supplied by the user:\n{request.case_summary.strip()}"
+    )[:4000]
+    try:
+        search_response = run_search(
+            retrieval_query,
+            top_k=5,
+            collection_name=INGESTION_COLLECTION_NAME,
+            document_ids=request.document_ids,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Case-analysis retrieval failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Judgment retrieval for case analysis is temporarily unavailable",
+        ) from exc
+
+    results = search_response["results"]
+    if not results:
+        raise HTTPException(
+            status_code=404,
+            detail="No relevant passages were found in the selected judgments; no case comparison is available.",
+        )
+
+    sources: list[dict[str, Any]] = []
+    for index, result in enumerate(results, start=1):
+        metadata = result["metadata"]
+        file_name = str(result["document"])
+        details = _case_details(metadata, file_name)
+        page_start = metadata.get("page_start")
+        page_end = metadata.get("page_end")
+        if page_start is None:
+            pages = "not recorded"
+        elif page_end is None or page_end == page_start:
+            pages = str(page_start)
+        else:
+            pages = f"{page_start}-{page_end}"
+        sources.append({
+            "source_id": f"S{index}",
+            "case_name": details["case_name"] or file_name,
+            "decision_date": details["decision_date"] or "not available",
+            "pages": pages,
+            "excerpt": str(result["text"])[:1200],
+            "retrieval_similarity": result.get("similarity"),
+        })
+
+    return {
+        "analysis": build_retrieval_analysis(request.case_summary, sources),
+        "method": "retrieval_comparison",
+        "sources": sources,
+        "notice": (
+            "No language model is used. Shared and differing terms are exact keyword matches "
+            "between your summary and retrieved excerpts; they do not establish legal similarity, "
+            "a legal argument, or missing evidence. Review full judgments with qualified counsel."
+        ),
+    }
 
 
 @app.get("/api/documents/{chunk_id}")

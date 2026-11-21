@@ -25,6 +25,21 @@ def test_search_defaults_to_v2_and_allows_legacy_selection(monkeypatch):
     assert requested_collections == [INGESTION_COLLECTION_NAME, "nyaai_judgments"]
 
 
+def test_search_skips_embedding_when_collection_is_empty(monkeypatch):
+    collection = SimpleNamespace(count=lambda: 0)
+    monkeypatch.setattr(search, "initialize_collection", lambda **_: collection)
+    monkeypatch.setattr(
+        search,
+        "embed_query",
+        lambda _: (_ for _ in ()).throw(AssertionError("embedding should be skipped")),
+    )
+
+    response = search.run_search("legal query")
+
+    assert response["results"] == []
+    assert response["corpus_available"] is False
+
+
 def test_search_overfetches_before_deduplication(monkeypatch):
     collection = SimpleNamespace(count=lambda: 100)
     monkeypatch.setattr(search, "initialize_collection", lambda **_: collection)
