@@ -6,12 +6,23 @@ import re
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.auth import (
+    SESSION_COOKIE_NAME,
+    SESSION_TTL_SECONDS,
+    DuplicateEmailError,
+    InvalidEmailError,
+    create_account,
+    delete_session,
+    login as authenticate_user,
+    normalize_email,
+    user_for_session,
+)
 from app.retrieval_analysis import build_retrieval_analysis
 from rag.config import CHROMA_DIR, EMBEDDING_MODEL, INGESTION_COLLECTION_NAME
 from rag.search import run_search
@@ -95,9 +106,88 @@ class CaseAnalysisRequest(BaseModel):
     document_ids: list[str] = Field(..., min_length=1, max_length=20)
 
 
+class AuthCredentials(BaseModel):
+    email: str = Field(..., min_length=3, max_length=254)
+    password: str = Field(..., min_length=8, max_length=128)
+
+
 @app.exception_handler(ValueError)
 async def value_error_handler(_request: Request, exc: ValueError):
     raise HTTPException(status_code=400, detail=str(exc))
+
+
+def _set_session_cookie(response: Response, request: Request, token: str) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        max_age=SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        path="/",
+    )
+
+
+def require_authenticated_user(request: Request) -> dict[str, Any]:
+    user = user_for_session(request.cookies.get(SESSION_COOKIE_NAME))
+    if user is None:
+        raise HTTPException(status_code=401, detail="Please log in to continue.")
+    return user
+
+
+@app.post("/api/auth/signup", status_code=201)
+def signup(
+    credentials: AuthCredentials,
+    request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    try:
+        email = normalize_email(credentials.email)
+    except InvalidEmailError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        user, token = create_account(email, credentials.password)
+    except DuplicateEmailError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    _set_session_cookie(response, request, token)
+    return {"authenticated": True, "user": user}
+
+
+@app.post("/api/auth/login")
+def login(
+    credentials: AuthCredentials,
+    request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    try:
+        email = normalize_email(credentials.email)
+    except InvalidEmailError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result = authenticate_user(email, credentials.password)
+    if result is None:
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    user, token = result
+    _set_session_cookie(response, request, token)
+    return {"authenticated": True, "user": user}
+
+
+@app.post("/api/auth/logout")
+def logout(request: Request, response: Response) -> dict[str, bool]:
+    delete_session(request.cookies.get(SESSION_COOKIE_NAME))
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        path="/",
+    )
+    return {"authenticated": False}
+
+
+@app.get("/api/auth/me")
+def current_user(request: Request) -> dict[str, Any]:
+    user = user_for_session(request.cookies.get(SESSION_COOKIE_NAME))
+    return {"authenticated": user is not None, "user": user}
 
 
 @app.get("/api/health")
@@ -116,7 +206,7 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/api/status")
-def status() -> dict[str, Any]:
+def status(_user: dict[str, Any] = Depends(require_authenticated_user)) -> dict[str, Any]:
     chunk_count = initialize_collection(INGESTION_COLLECTION_NAME).count()
     return {
         "default_collection": INGESTION_COLLECTION_NAME,
@@ -129,7 +219,10 @@ def status() -> dict[str, Any]:
 
 
 @app.post("/api/retrieve")
-def retrieve(request: RetrievalRequest) -> dict[str, Any]:
+def retrieve(
+    request: RetrievalRequest,
+    _user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
     collection_name = request.collection or INGESTION_COLLECTION_NAME
     try:
         response = run_search(
@@ -146,7 +239,10 @@ def retrieve(request: RetrievalRequest) -> dict[str, Any]:
 
 
 @app.post("/api/query")
-def query(request: QueryRequest) -> dict[str, Any]:
+def query(
+    request: QueryRequest,
+    _user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
     collection_name = request.collection or INGESTION_COLLECTION_NAME
     try:
         response = run_search(
@@ -211,7 +307,10 @@ def query(request: QueryRequest) -> dict[str, Any]:
 
 
 @app.post("/api/analyze-case")
-def analyze_case(request: CaseAnalysisRequest) -> dict[str, Any]:
+def analyze_case(
+    request: CaseAnalysisRequest,
+    _user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
     retrieval_query = (
         f"{request.question.strip()}\n\n"
         f"Case facts supplied by the user:\n{request.case_summary.strip()}"
@@ -274,7 +373,10 @@ def analyze_case(request: CaseAnalysisRequest) -> dict[str, Any]:
 
 
 @app.get("/api/documents/{chunk_id}")
-def document(chunk_id: str) -> dict[str, Any]:
+def document(
+    chunk_id: str,
+    _user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
     try:
         collection = initialize_collection(INGESTION_COLLECTION_NAME)
         record = collection.get(ids=[chunk_id], include=["documents", "metadatas"])
@@ -291,8 +393,13 @@ def document(chunk_id: str) -> dict[str, Any]:
 
 
 @app.get("/", include_in_schema=False)
-def index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+def index(request: Request) -> FileResponse:
+    user = user_for_session(request.cookies.get(SESSION_COOKIE_NAME))
+    page = "index.html" if user is not None else "auth.html"
+    return FileResponse(
+        STATIC_DIR / page,
+        headers={"Cache-Control": "no-store", "Vary": "Cookie"},
+    )
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

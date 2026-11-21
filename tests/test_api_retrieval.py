@@ -1,6 +1,19 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app import main
+
+
+@pytest.fixture
+def authenticated_client(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUTH_DB_PATH", str(tmp_path / "auth.sqlite3"))
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/api/auth/signup",
+            json={"email": "researcher@example.com", "password": "research-password-123"},
+        )
+        assert response.status_code == 201
+        yield client
 
 
 def test_health_endpoint_reports_collection(monkeypatch):
@@ -15,13 +28,13 @@ def test_health_endpoint_reports_collection(monkeypatch):
     assert response.json()["chunk_count"] == 25
 
 
-def test_status_declares_retrieval_only_mode(monkeypatch):
+def test_status_declares_retrieval_only_mode(monkeypatch, authenticated_client):
     class Collection:
         def count(self):
             return 0
 
     monkeypatch.setattr(main, "initialize_collection", lambda _name: Collection())
-    response = TestClient(main.app).get("/api/status")
+    response = authenticated_client.get("/api/status")
     assert response.status_code == 200
     assert response.json()["mode"] == "retrieval_only"
     assert response.json()["corpus_available"] is False
@@ -29,7 +42,7 @@ def test_status_declares_retrieval_only_mode(monkeypatch):
     assert "llm_configured" not in response.json()
 
 
-def test_query_returns_only_retrieved_sources(monkeypatch):
+def test_query_returns_only_retrieved_sources(monkeypatch, authenticated_client):
     requested = {}
 
     def fake_search(query, top_k, collection_name):
@@ -54,7 +67,7 @@ def test_query_returns_only_retrieved_sources(monkeypatch):
         }
 
     monkeypatch.setattr(main, "run_search", fake_search)
-    response = TestClient(main.app).post(
+    response = authenticated_client.post(
         "/api/query",
         json={"query": "Article 21 personal liberty", "top_k": 1},
     )
@@ -76,7 +89,7 @@ def test_query_returns_only_retrieved_sources(monkeypatch):
     assert "legal_principles" not in body
 
 
-def test_query_can_restrict_follow_up_search_to_selected_cases(monkeypatch):
+def test_query_can_restrict_follow_up_search_to_selected_cases(monkeypatch, authenticated_client):
     requested = {}
 
     def fake_search(query, top_k, collection_name, document_ids=None):
@@ -89,7 +102,7 @@ def test_query_can_restrict_follow_up_search_to_selected_cases(monkeypatch):
         return {"results": [], "candidates_retrieved": 0, "duplicates_removed": 0}
 
     monkeypatch.setattr(main, "run_search", fake_search)
-    response = TestClient(main.app).post(
+    response = authenticated_client.post(
         "/api/query",
         json={
             "query": "follow-up question",
@@ -101,13 +114,13 @@ def test_query_can_restrict_follow_up_search_to_selected_cases(monkeypatch):
     assert requested["document_ids"] == ["doc-1", "doc-2"]
 
 
-def test_query_reports_no_results_without_claiming_no_authorities(monkeypatch):
+def test_query_reports_no_results_without_claiming_no_authorities(monkeypatch, authenticated_client):
     monkeypatch.setattr(main, "run_search", lambda *_args, **_kwargs: {
         "results": [],
         "candidates_retrieved": 0,
         "duplicates_removed": 0,
     })
-    response = TestClient(main.app).post(
+    response = authenticated_client.post(
         "/api/query",
         json={"query": "a topic not represented in this corpus"},
     )
@@ -117,7 +130,7 @@ def test_query_reports_no_results_without_claiming_no_authorities(monkeypatch):
     assert "does not establish" in response.json()["limitations"][0]
 
 
-def test_query_does_not_invent_date_when_filename_has_no_date(monkeypatch):
+def test_query_does_not_invent_date_when_filename_has_no_date(monkeypatch, authenticated_client):
     monkeypatch.setattr(main, "run_search", lambda *_args, **_kwargs: {
         "results": [{
             "document": "A_Case_vs_State_1.pdf",
@@ -131,7 +144,7 @@ def test_query_does_not_invent_date_when_filename_has_no_date(monkeypatch):
         "duplicates_removed": 0,
     })
 
-    response = TestClient(main.app).post("/api/query", json={"query": "case summary"})
+    response = authenticated_client.post("/api/query", json={"query": "case summary"})
 
     assert response.status_code == 200
     result = response.json()["results"][0]
@@ -140,15 +153,14 @@ def test_query_does_not_invent_date_when_filename_has_no_date(monkeypatch):
     assert result["decision_date"] is None
 
 
-def test_query_validates_blank_query_and_top_k():
-    client = TestClient(main.app)
-    blank = client.post("/api/query", json={"query": "   "})
-    excessive_k = client.post("/api/query", json={"query": "constitutional law", "top_k": 21})
+def test_query_validates_blank_query_and_top_k(authenticated_client):
+    blank = authenticated_client.post("/api/query", json={"query": "   "})
+    excessive_k = authenticated_client.post("/api/query", json={"query": "constitutional law", "top_k": 21})
     assert blank.status_code == 422
     assert excessive_k.status_code == 422
 
 
-def test_case_analysis_returns_retrieval_comparison_without_a_model(monkeypatch):
+def test_case_analysis_returns_retrieval_comparison_without_a_model(monkeypatch, authenticated_client):
     requested = {}
 
     def fake_search(query, top_k, collection_name, document_ids=None):
@@ -176,7 +188,7 @@ def test_case_analysis_returns_retrieval_comparison_without_a_model(monkeypatch)
 
     monkeypatch.setattr(main, "run_search", fake_search)
 
-    response = TestClient(main.app).post(
+    response = authenticated_client.post(
         "/api/analyze-case",
         json={
             "case_summary": "The prosecution must prove a circumstantial chain beyond reasonable doubt.",
@@ -206,10 +218,10 @@ def test_case_analysis_returns_retrieval_comparison_without_a_model(monkeypatch)
     assert "No language model is used" in body["notice"]
 
 
-def test_case_analysis_returns_not_found_without_retrieved_sources(monkeypatch):
+def test_case_analysis_returns_not_found_without_retrieved_sources(monkeypatch, authenticated_client):
     monkeypatch.setattr(main, "run_search", lambda *_args, **_kwargs: {"results": []})
 
-    response = TestClient(main.app).post(
+    response = authenticated_client.post(
         "/api/analyze-case",
         json={
             "case_summary": "A case summary.",

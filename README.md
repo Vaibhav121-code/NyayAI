@@ -12,6 +12,7 @@ Nyay AI is a local semantic search and legal-research application for Indian Sup
 - Configurable top-k retrieval
 - Semantic retrieval API and deterministic case-to-precedent comparison
 - No generative model, external AI provider, or AI API credentials
+- Basic email/password signup and login with salted password hashes and expiring HTTP-only sessions
 - Professional responsive web interface
 - Grouped, bullet-point case results with available decision date, pages, sources, technical score, and selected verbatim passage highlights
 - Chatbot follow-ups can target one explicitly selected or named case (Case A–E), retain recent question context, and show question-ranked excerpts with page and chunk citations
@@ -72,6 +73,8 @@ Copy-Item .env.example .env
 
 Search requires no API key or generative model. The local embedding model and ChromaDB collection may need to be downloaded or initialized the first time they are run.
 
+On the first visit, create an account or log in. Accounts are stored in a local SQLite database at `data/auth.sqlite3`; passwords are stored as salted scrypt hashes. The database is ignored by Git. This basic authentication does not include email verification or password recovery.
+
 Enter a short case summary or legal issue in the web interface. Retrieved passages are grouped by judgment and presented as case cards with page references and excerpts. Case analysis compares exact keywords in the supplied summary with passages retrieved from the selected judgments and surfaces general questions for counsel. It does not generate arguments, determine legal applicability, or identify confirmed evidence gaps. Keyword overlap is not proof of factual or legal similarity; review complete judgments and consult qualified counsel.
 
 ## Run locally
@@ -88,7 +91,7 @@ API documentation is available at `http://127.0.0.1:8000/docs`.
 
 The repository includes a Render Blueprint in `render.yaml`. Push the project to GitHub, create a new Blueprint from the repository in Render, and deploy the `nyayai-demo` web service. The service uses the lightweight `requirements-render.txt` dependencies and reports when the judgment corpus is missing.
 
-The local ChromaDB corpus is not stored in Git and is approximately 6.9 GB. Render's free web services use ephemeral storage and cannot attach persistent disks, so this free demo serves the UI but cannot return case-search results. A full search deployment needs a paid persistent disk or an external vector database and a separate data transfer/migration.
+The local ChromaDB corpus is not stored in Git and is approximately 6.9 GB. Render's free web services use ephemeral storage and cannot attach persistent disks, so this free demo serves the UI but cannot return case-search results. The local SQLite account database is also ephemeral on Render's free tier; accounts may be lost when the service restarts or redeploys. Set `AUTH_DB_PATH` to a mounted persistent disk path on a paid service if account persistence is required. A full search deployment also needs a persistent disk or an external vector database and a separate data transfer/migration.
 
 ## Environment variables
 
@@ -100,12 +103,17 @@ The local ChromaDB corpus is not stored in Git and is approximately 6.9 GB. Rend
 | `EMBEDDING_MODEL` | MiniLM L6 v2 | Query and document embedding model |
 | `TOP_K` | `5` | Default retrieval count |
 | `CORS_ORIGINS` | local URLs | Allowed frontend origins |
+| `AUTH_DB_PATH` | `./data/auth.sqlite3` | SQLite database for user accounts and sessions |
 
 ## API
 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/api/health` | Collection and process health |
+| `POST` | `/api/auth/signup` | Create an account and sign in |
+| `POST` | `/api/auth/login` | Sign in |
+| `POST` | `/api/auth/logout` | Sign out |
+| `GET` | `/api/auth/me` | Check the current session |
 | `GET` | `/api/status` | Retrieval configuration |
 | `POST` | `/api/retrieve` | Retrieval-only debugging |
 | `POST` | `/api/query` | Semantic judgment search with source passages |

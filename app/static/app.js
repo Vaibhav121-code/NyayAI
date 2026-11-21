@@ -17,6 +17,10 @@ async function checkStatus() {
   const status = document.querySelector("#systemStatus");
   try {
     const response = await fetch("/api/status");
+    if (response.status === 401) {
+      window.location.replace("/");
+      return;
+    }
     if (!response.ok) throw new Error("Status check failed");
     const data = await response.json();
     if (data.corpus_available === false) {
@@ -31,6 +35,43 @@ async function checkStatus() {
     status.innerHTML = "<i></i> System unavailable";
   }
 }
+
+async function checkAccount() {
+  const accountEmail = document.querySelector("#accountEmail");
+  try {
+    const response = await fetch("/api/auth/me");
+    if (response.status === 401) {
+      window.location.replace("/");
+      return;
+    }
+    if (!response.ok) throw new Error("Unable to verify your sign-in.");
+    const result = await response.json();
+    if (!result.authenticated || !result.user) {
+      window.location.replace("/");
+      return;
+    }
+    accountEmail.textContent = result.user.email;
+  } catch (error) {
+    const status = document.querySelector("#systemStatus");
+    status.className = "status error";
+    status.textContent = error.message;
+  }
+}
+
+document.querySelector("#logoutButton").addEventListener("click", async event => {
+  const button = event.currentTarget;
+  const status = document.querySelector("#systemStatus");
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/auth/logout", { method: "POST" });
+    if (!response.ok) throw new Error("Unable to log out. Please try again.");
+    window.location.replace("/");
+  } catch (error) {
+    status.className = "status error";
+    status.textContent = error.message;
+    button.disabled = false;
+  }
+});
 
 function escapeHtml(value) {
   const element = document.createElement("div");
@@ -562,3 +603,4 @@ form.addEventListener("submit", async event => {
 });
 
 checkStatus();
+checkAccount();

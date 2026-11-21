@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Nyay AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Caslon+Text:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css?v=auth-1">
+</head>
+<body class="auth-page">
+  <main class="auth-shell">
+    <a class="brand auth-brand" href="/" aria-label="Nyay AI home">
+      <span class="brand-mark">न्याय</span>
+      <span><strong>Nyay</strong><small>AI</small></span>
+    </a>
+    <section class="auth-card" aria-labelledby="authTitle">
+      <span class="answer-kicker">Private legal research</span>
+      <h1 id="authTitle">Welcome back</h1>
+      <p id="authDescription" class="auth-description">Log in to continue to Nyay AI.</p>
+      <div class="auth-tabs" role="group" aria-label="Choose an account action">
+        <button id="showLogin" type="button" aria-pressed="true">Log in</button>
+        <button id="showSignup" type="button" aria-pressed="false">Sign up</button>
+      </div>
+      <form id="authForm">
+        <label for="authEmail">Email</label>
+        <input id="authEmail" name="email" type="email" autocomplete="username" maxlength="254" required>
+        <label for="authPassword">Password</label>
+        <input id="authPassword" name="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required>
+        <div id="confirmPasswordField" hidden>
+          <label for="authPasswordConfirm">Confirm password</label>
+          <input id="authPasswordConfirm" name="passwordConfirm" type="password" autocomplete="new-password" minlength="8" maxlength="128">
+        </div>
+        <p id="authMessage" class="auth-message" role="alert" hidden></p>
+        <button id="authSubmit" class="auth-submit" type="submit">Log in</button>
+      </form>
+      <p class="auth-footnote">Passwords are stored as salted hashes. This basic account system does not include email verification or password recovery.</p>
+    </section>
+  </main>
+  <script src="/static/auth.js?v=auth-1"></script>
+</body>
+</html>

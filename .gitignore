@@ -19,6 +19,7 @@ venv/
 /data/chroma/
 /data/chroma_backup/
 /data/processed/
+/data/auth.sqlite3*
 /data/ingestion_state.sqlite3*
 /data/test_tracker.sqlite3*
 /data/ingestion_failures.csv
